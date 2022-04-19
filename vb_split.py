@@ -93,7 +93,7 @@ def split_vb_file_and_make_ini_file(meshname):
     ini_text.append(';allow_duplicate_hash=true\n')
     
     #Write ini file
-    if not exists(meshname + '.ini'):
+    if not os.path.exists(meshname + '.ini'):
         with open(meshname + '.ini', 'w') as f:
     	    f.write("".join(ini_text))
         
