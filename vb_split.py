@@ -71,7 +71,7 @@ def split_vb_file_and_make_ini_file(meshname):
     
     #ini file - Texture Override
     ini_text.append(';[TextureOverride_' + meshname + ']\n')
-    ini_text.append('; *** Hash needs to be filled in below\n')
+    ini_text.append('; *** Texture hash needs to be filled in below\n')
     ini_text.append(';hash = _________\n')
     for vertex_group in range(len(strides)):
     	ini_text.append(';vb' + str(vertex_group) + ' = Resource_Model_' + meshname + '_VB' +str(vertex_group) + '\n')
@@ -82,7 +82,7 @@ def split_vb_file_and_make_ini_file(meshname):
     
     #ini file - Shader Override
     ini_text.append(';[ShaderOverride_' + meshname + ']\n')
-    ini_text.append('; *** Hash needs to be filled in below.\n')
+    ini_text.append('; *** Pixel shader hash needs to be filled in below.\n')
     ini_text.append('; *** Duplicate this section as needed if the texture is called by more than one pixel shader.\n')
     ini_text.append('; ***     (If duplicating, keep in mind each section needs its own unique name.)\n')
     ini_text.append(';hash = _________\n')
