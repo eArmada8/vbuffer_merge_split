@@ -11,13 +11,14 @@ def retrieve_indices():
     return sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb0*txt')])
 
 def copy_ib_file_to_output(fileindex):
-    # Copy the index buffer file to the output directory unmodified
+    # Copy the index buffer file to the output directory unmodified, if it exists
     ib_filename = str(glob.glob(fileindex + '-ib*')[0])
-    with open(ib_filename, 'r') as f:
-        ib_file_data = f.read()
-    with open('output/' + ib_filename, 'w') as f:
-        f.write(ib_file_data)
-    del ib_file_data
+    if os.path.exists(ib_filename):
+        with open(ib_filename, 'r') as f:
+            ib_file_data = f.read()
+        with open('output/' + ib_filename, 'w') as f:
+            f.write(ib_file_data)
+        del ib_file_data
     return
     
 def merge_vb_file_to_output(fileindex):
