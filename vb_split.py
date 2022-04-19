@@ -2,7 +2,7 @@
 # this script will split the combined vertex buffer into individual buffers for games that use separate
 # buffers for each vertex element.  Execute from the directory of the buffers and it will split any vb
 # files it finds that has a corresponding fmt file.  It will also create a rudimentary ini file for use
-# with 3dmigoto.  Has only been tested with TOCS4.
+# with 3dmigoto if one doesn't already exist.  Has only been tested with TOCS4.
 # GitHub eArmada8/vbuffer_merge_split
 
 import glob, os, re
@@ -89,11 +89,13 @@ def split_vb_file_and_make_ini_file(meshname):
     ini_text.append('; *** Uncomment the lines below or insert run statement, depending on your 3dmigoto setup\n')
     for vertex_group in range(len(strides)):
     	ini_text.append(';checktextureoverride = vb' +str(vertex_group) + '\n')
+    ini_text.append(';checktextureoverride = ib\n')
     ini_text.append(';allow_duplicate_hash=true\n')
     
     #Write ini file
-    with open(meshname + '.ini', 'w') as f:
-    	f.write("".join(ini_text))
+    if not exists(meshname + '.ini'):
+        with open(meshname + '.ini', 'w') as f:
+    	    f.write("".join(ini_text))
         
     return
 
