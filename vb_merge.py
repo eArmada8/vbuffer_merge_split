@@ -12,7 +12,7 @@ def retrieve_indices():
 
 def copy_ib_file_to_output(fileindex):
     # Copy the index buffer file to the output directory unmodified, if it exists
-    ib_filename = str(glob.glob(fileindex + '-ib*')[0])
+    ib_filename = str(glob.glob(fileindex + '-ib*txt')[0])
     if os.path.exists(ib_filename):
         with open(ib_filename, 'r') as f:
             ib_file_data = f.read()
@@ -24,7 +24,7 @@ def copy_ib_file_to_output(fileindex):
 def merge_vb_file_to_output(fileindex):
     # Take all the vertex buffer files for one index buffer and merge them into a single vertex buffer file
     #First, get a list of all the VB files
-    vb_filenames = sorted(glob.glob(fileindex + '-vb*'))
+    vb_filenames = sorted(glob.glob(fileindex + '-vb*txt'))
 
     #Get the strides for each buffer
     strides = []
