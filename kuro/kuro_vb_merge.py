@@ -23,70 +23,45 @@ def merge_vb_file_to_output(fileindex):
     # First, get a list of all the VB files
     vb_filenames = sorted(glob.glob(fileindex + '-vb*txt'))
 
-    # Grab all data from files
-    with open(vb_filenames[0], 'rb') as f:
-        vb0_data = f.read()
-    with open(vb_filenames[1], 'rb') as f:
-        vb1_data = f.read()
-    with open(vb_filenames[2], 'rb') as f:
-        vb2_data = f.read()
-    with open(vb_filenames[3], 'rb') as f:
-        vb3_data = f.read()
-    with open(vb_filenames[4], 'rb') as f:
-        vb4_data = f.read()
-    with open(vb_filenames[5], 'rb') as f:
-        vb5_data = f.read()
-    with open(vb_filenames[-2], 'rb') as f: #Second to last file
-        vb6_data = f.read()
-    with open(vb_filenames[-1], 'rb') as f: #Last file
-        vb7_data = f.read()
+    #Grab vertex data, file by file, into two dimensional list
+    line_headers = [b']+000 POSITION: ', b']+012 NORMAL: ', b']+024 TANGENT: ', b']+036 TEXCOORD: ', b']+044 TEXCOORD1: ', b']+052 TEXCOORD2: ', b']+060 BLENDWEIGHTS: ', b']+076 BLENDINDICES: ']
+    vertex_data = []
+    for i in range(len(vb_filenames)):
+        vertex_file_data = []
+        with open(vb_filenames[i], 'rb') as f:
+            vb_data = f.read()
+            current_index = 0
+            current_offset = vb_data.find(b'vertex-data', 0) # Jump to start of vertex data
+            while current_offset > 0:
+                try:
+                    current_offset = vb_data.find(b': ', vb_data.find(b'\x0d\x0a\x76\x62', current_offset + 1)) # Jump to next vertex
+                    next_offset = vb_data.find(b'\x0d\x0a', current_offset + 1)
+                    vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + line_headers[i] + vb_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
+                    current_index = current_index + 1
+                except IndexError:
+                    pass
+                continue
+            vertex_data.append(vertex_file_data)
 
-    current_index = 0
-    current_offset = vb0_data.find(b'vertex-data', 0) # Jump to start of vertex data
-    vertex_data = bytearray()
-    while current_offset > 0:
-        try:
-            current_vertex_data = bytearray()
-            current_offset = vb0_data.find(b': ', vb0_data.find(b'\x0d\x0a\x76\x62', current_offset + 1)) # Jump to next vertex
-            next_offset = vb0_data.find(b'\x0d\x0a', current_offset + 1)
-            # VB0 data
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+000 POSITION: ' + vb0_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
-            # VB1 data
-            vb1_offset = vb1_data.find(b': ', vb1_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+012 NORMAL: ' + vb1_data[vb1_offset:vb1_data.find(b'\x0d\x0a', vb1_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # VB2 data
-            vb2_offset = vb2_data.find(b': ', vb2_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+024 TANGENT: ' + vb2_data[vb2_offset:vb2_data.find(b'\x0d\x0a', vb2_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # VB3 data
-            vb3_offset = vb3_data.find(b': ', vb3_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+036 TEXCOORD: ' + vb3_data[vb3_offset:vb3_data.find(b'\x0d\x0a', vb3_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # VB4 data
-            vb4_offset = vb4_data.find(b': ', vb4_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+044 TEXCOORD1: ' + vb4_data[vb4_offset:vb4_data.find(b'\x0d\x0a', vb4_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # VB5 data
-            vb5_offset = vb5_data.find(b': ', vb5_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+052 TEXCOORD2: ' + vb5_data[vb5_offset:vb5_data.find(b'\x0d\x0a', vb5_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # VB6 data
-            vb6_offset = vb6_data.find(b': ', vb6_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+060 BLENDWEIGHTS: ' + vb6_data[vb6_offset:vb6_data.find(b'\x0d\x0a', vb6_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # VB7 data
-            vb7_offset = vb7_data.find(b': ', vb7_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+076 BLENDINDICES: ' + vb7_data[vb7_offset:vb7_data.find(b'\x0d\x0a', vb7_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
-            # Add the expected extra endline
-            current_vertex_data.extend(b'\x0d\x0a')
-            vertex_data.extend(current_vertex_data)
-            current_index = current_index + 1
-        except IndexError:
-            pass
-        continue
+    #Build vertex list in format expected by Blender plugin
+    vertex_output = bytearray()
+    for i in range(len(vertex_data[0])):
+        for j in range(len(vertex_data)):
+            try:
+                vertex_output.extend(vertex_data[j][i])
+            except IndexError:
+                pass
+            continue
+        #Blender plugin expects a blank line after every vertex group
+        vertex_output.extend(b'\x0d\x0a')
 
-    # Split in two, so vertex count can be added in
+    #Add vertex count into pre-baked header
     header1 = b'stride: 92\x0d\x0afirst vertex: 0\x0d\x0avertex count: '
     header2 = b'\x0d\x0afirst instance: 0\x0d\x0ainstance count: 1\x0d\x0atopology: trianglelist\x0d\x0aelement[0]:\x0d\x0a  SemanticName: POSITION\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 0\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[1]:\x0d\x0a  SemanticName: NORMAL\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 12\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[2]:\x0d\x0a  SemanticName: TANGENT\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 24\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[3]:\x0d\x0a  SemanticName: TEXCOORD\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 36\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[4]:\x0d\x0a  SemanticName: TEXCOORD\x0d\x0a  SemanticIndex: 1\x0d\x0a  Format: R32G32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 44\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[5]:\x0d\x0a  SemanticName: TEXCOORD\x0d\x0a  SemanticIndex: 2\x0d\x0a  Format: R32G32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 52\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[6]:\x0d\x0a  SemanticName: BLENDWEIGHTS\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32A32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 60\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[7]:\x0d\x0a  SemanticName: BLENDINDICES\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32A32_UINT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 76\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0a\x0d\x0avertex-data:\x0d\x0a\x0d\x0a'
     header = header1 + str(current_index).encode("utf8") + header2
 
     with open('output/' + vb_filenames[0], 'wb') as f:
-        f.write(header+vertex_data)
+        f.write(header+vertex_output)
     return
 
 # End of functions, begin main script
