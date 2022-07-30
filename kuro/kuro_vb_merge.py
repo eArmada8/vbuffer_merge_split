@@ -32,10 +32,14 @@ def merge_vb_file_to_output(fileindex):
         vb2_data = f.read()
     with open(vb_filenames[3], 'rb') as f:
         vb3_data = f.read()
-    with open(vb_filenames[-2], 'rb') as f: #Second to last file
+    with open(vb_filenames[4], 'rb') as f:
         vb4_data = f.read()
-    with open(vb_filenames[-1], 'rb') as f: #Last file
+    with open(vb_filenames[5], 'rb') as f:
         vb5_data = f.read()
+    with open(vb_filenames[-2], 'rb') as f: #Second to last file
+        vb6_data = f.read()
+    with open(vb_filenames[-1], 'rb') as f: #Last file
+        vb7_data = f.read()
 
     current_index = 0
     current_offset = vb0_data.find(b'vertex-data', 0) # Jump to start of vertex data
@@ -58,10 +62,16 @@ def merge_vb_file_to_output(fileindex):
             current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+036 TEXCOORD: ' + vb3_data[vb3_offset:vb3_data.find(b'\x0d\x0a', vb3_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
             # VB4 data
             vb4_offset = vb4_data.find(b': ', vb4_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+044 BLENDWEIGHTS: ' + vb4_data[vb4_offset:vb4_data.find(b'\x0d\x0a', vb4_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
+            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+044 TEXCOORD1: ' + vb4_data[vb4_offset:vb4_data.find(b'\x0d\x0a', vb4_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
             # VB5 data
             vb5_offset = vb5_data.find(b': ', vb5_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
-            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+060 BLENDINDICES: ' + vb5_data[vb5_offset:vb5_data.find(b'\x0d\x0a', vb5_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
+            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+052 TEXCOORD2: ' + vb5_data[vb5_offset:vb5_data.find(b'\x0d\x0a', vb5_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
+            # VB6 data
+            vb6_offset = vb6_data.find(b': ', vb6_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
+            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+060 BLENDWEIGHTS: ' + vb6_data[vb6_offset:vb6_data.find(b'\x0d\x0a', vb6_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
+            # VB7 data
+            vb7_offset = vb7_data.find(b': ', vb7_data.find(b'[' + str(current_index).encode("utf8") + b']+000'))
+            current_vertex_data.extend(b'vb0[' + str(current_index).encode("utf8") + b']+076 BLENDINDICES: ' + vb7_data[vb7_offset:vb7_data.find(b'\x0d\x0a', vb7_offset + 1)].split(b': ')[1] + b'\x0d\x0a')
             # Add the expected extra endline
             current_vertex_data.extend(b'\x0d\x0a')
             vertex_data.extend(current_vertex_data)
