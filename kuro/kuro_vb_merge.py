@@ -9,7 +9,7 @@ import glob, os, re, shutil
 def retrieve_indices():
     # Make a list of all vertex buffer indices in the current folder
     # NOTE: Will *not* include index buffers without vertex data! (i.e. ib files without corresponding vb files)
-    return sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb0*txt')])
+    return sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb7*txt')])
 
 def copy_ib_file_to_output(fileindex):
     # Copy the index buffer file to the output directory unmodified, if it exists
