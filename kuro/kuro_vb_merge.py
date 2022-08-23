@@ -7,9 +7,11 @@
 import glob, os, re, shutil
 
 def retrieve_indices():
-    # Make a list of all vertex buffer indices in the current folder
+    # Make a list of all vertex buffer indices in the current folder (only include 8-part vertex buffers)
     # NOTE: Will *not* include index buffers without vertex data! (i.e. ib files without corresponding vb files)
-    return sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb7*txt')])
+    list = sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb7*txt')])
+    list_to_exclude = [re.findall('^\d+', x)[0] for x in glob.glob('*-vb8*txt')]
+    return [x for x in list if x not in list_to_exclude]
 
 def copy_ib_file_to_output(fileindex):
     # Copy the index buffer file to the output directory unmodified, if it exists
@@ -26,10 +28,9 @@ def merge_vb_file_to_output(fileindex):
     #Get the strides for each buffer
     strides = []
     for i in range(len(vb_filenames)):
-        with open(vb_filenames[i], 'r') as f:
-            for line in f:
-                if line[0:6] == 'stride':
-                    strides.append(int(line[8:-1]))
+        with open(vb_filenames[i], 'rb') as f:
+            vb_data = f.read()
+        strides.append(int(vb_data[vb_data.find(b'stride:')+8:vb_data.find(b'\x0d\x0a')]))
 
     #Calculate aligned byte offsets
     offsets = []
