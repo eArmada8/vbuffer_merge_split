@@ -1,7 +1,7 @@
 # Vertex buffer merge script - for use with 3dmigoto frame dumps from games that use separate buffers
 # for each vertex element.  Execute from the directory of the indexed frame dump (not de-duped) and it will
 # output any buffers it finds into the ./output directory.  Specifically for Kuro no Kiseki meshes with
-# 7 vertex buffers; will completely discard buffers 4 and 5 as it only reads the first three and the last two.
+# 7 vertex buffers.
 # GitHub eArmada8/vbuffer_merge_split
 
 import glob, os, re, shutil
