@@ -23,6 +23,44 @@ def merge_vb_file_to_output(fileindex):
     # First, get a list of all the VB files
     vb_filenames = sorted(glob.glob(fileindex + '-vb*txt'))
 
+    #Get the strides for each buffer
+    strides = []
+    for i in range(len(vb_filenames)):
+        with open(vb_filenames[i], 'r') as f:
+            for line in f:
+                if line[0:6] == 'stride':
+                    strides.append(int(line[8:-1]))
+
+    #Calculate aligned byte offsets
+    offsets = []
+    for i in range(len(strides)):
+        if i == 0:
+            offsets.append(0)
+        else:
+            offsets.append(sum(strides[0:i]))
+
+    #Create Header
+    semantics = [b'POSITION', b'NORMAL', b'TANGENT', b'TEXCOORD', b'TEXCOORD', b'TEXCOORD', b'BLENDWEIGHTS', b'BLENDINDICES']
+    output = []
+    with open(vb_filenames[0], 'rb') as f:
+        vb_data = f.read()
+        end_of_header = vb_data.find(b'\x0d\x0avb', 0)+2
+        header = bytearray(vb_data[0:end_of_header])
+        header[header.find(b'stride:')+8:header.find(b'\x0d\x0a')] = str(sum(strides)).encode() #First line, replace with the merged stride
+
+    #Replace Semantic name, input slot and aligned byte offset for each element
+    current_offset = header.find(b'element[')
+    while current_offset > 0:
+        current_element = int(header[current_offset+8:current_offset+9])
+        start_of_name = header.find(b'SemanticName',current_offset)+14 #Will set element to the section in which we are working (POSITION, TEXCOORD, etc) by number as all ripped names are garbage
+        end_of_name = header.find(b'\x0d\x0a', start_of_name)
+        start_of_inputslot = header.find(b'InputSlot',current_offset)+11 #Will change all input slots to 0 since we only have one vb0 at the end
+        end_of_inputslot = header.find(b'\x0d\x0a', start_of_inputslot)
+        start_of_alignedbyteoffset = header.find(b'AlignedByteOffset',current_offset)+19 #Will need to add the correct offset for each element
+        end_of_alignedbyteoffset = header.find(b'\x0d\x0a', start_of_alignedbyteoffset)
+        header = header[:start_of_name] + semantics[current_element] + header[end_of_name:start_of_inputslot] + b'0' + header[end_of_inputslot:start_of_alignedbyteoffset] + str(offsets[current_element]).encode() + header[end_of_alignedbyteoffset:]
+        current_offset = header.find(b'element[', current_offset + 1)
+
     #Grab vertex data, file by file, into two dimensional list
     line_headers = [b']+000 POSITION: ', b']+012 NORMAL: ', b']+024 TANGENT: ', b']+036 TEXCOORD: ', b']+044 TEXCOORD1: ', b']+052 TEXCOORD2: ', b']+060 BLENDWEIGHTS: ', b']+076 BLENDINDICES: ']
     vertex_data = []
@@ -54,11 +92,6 @@ def merge_vb_file_to_output(fileindex):
             continue
         #Blender plugin expects a blank line after every vertex group
         vertex_output.extend(b'\x0d\x0a')
-
-    #Add vertex count into pre-baked header
-    header1 = b'stride: 92\x0d\x0afirst vertex: 0\x0d\x0avertex count: '
-    header2 = b'\x0d\x0afirst instance: 0\x0d\x0ainstance count: 1\x0d\x0atopology: trianglelist\x0d\x0aelement[0]:\x0d\x0a  SemanticName: POSITION\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 0\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[1]:\x0d\x0a  SemanticName: NORMAL\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 12\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[2]:\x0d\x0a  SemanticName: TANGENT\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 24\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[3]:\x0d\x0a  SemanticName: TEXCOORD\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 36\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[4]:\x0d\x0a  SemanticName: TEXCOORD\x0d\x0a  SemanticIndex: 1\x0d\x0a  Format: R32G32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 44\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[5]:\x0d\x0a  SemanticName: TEXCOORD\x0d\x0a  SemanticIndex: 2\x0d\x0a  Format: R32G32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 52\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[6]:\x0d\x0a  SemanticName: BLENDWEIGHTS\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32A32_FLOAT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 60\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0aelement[7]:\x0d\x0a  SemanticName: BLENDINDICES\x0d\x0a  SemanticIndex: 0\x0d\x0a  Format: R32G32B32A32_UINT\x0d\x0a  InputSlot: 0\x0d\x0a  AlignedByteOffset: 76\x0d\x0a  InputSlotClass: per-vertex\x0d\x0a  InstanceDataStepRate: 0\x0d\x0a\x0d\x0avertex-data:\x0d\x0a\x0d\x0a'
-    header = header1 + str(current_index).encode("utf8") + header2
 
     with open('output/' + vb_filenames[0], 'wb') as f:
         f.write(header+vertex_output)
