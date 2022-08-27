@@ -14,17 +14,21 @@ def process_ini_file(ini_file):
     with open(ini_file, 'rb') as f:
         ini_filedata = f.read()
 
-    # Further Processing should proceed only if IB file was found
-    processed = False
+    # Replace all the drawindexed* commands
+    changes_made = False
     current_offset = ini_filedata.find(b'\x0adrawindexed')
-    if current_offset > 0:
+    while current_offset > 0:
         line_end = ini_filedata.find(b'\x0d\x0a',current_offset)
-        with open(ini_file, 'wb') as f:
-            f.write(ini_filedata[:current_offset] + b'\x0adrawindexedinstanced = auto' + ini_filedata[line_end:])
-        processed = True
+        ini_filedata = ini_filedata[:current_offset] + b'\x0adrawindexedinstanced = auto' + ini_filedata[line_end:]
+        current_offset = ini_filedata.find(b'\x0adrawindexed', current_offset + 1)
+        changes_made = True
 
-    # Not really needed
-    return(processed)
+    # If any changes were made, write the new file
+    if changes_made == True:
+        with open(ini_file, 'wb') as f:
+            f.write(ini_filedata)
+
+    return(changes_made)
 
 if __name__ == "__main__":
     # Set current directory
