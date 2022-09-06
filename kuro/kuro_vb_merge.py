@@ -53,17 +53,21 @@ def merge_vb_file_to_output(fileindex):
     current_offset = header.find(b'element[')
     while current_offset > 0:
         current_element = int(header[current_offset+8:current_offset+9])
-        start_of_name = header.find(b'SemanticName',current_offset)+14 #Will set element to the section in which we are working (POSITION, TEXCOORD, etc) by number as all ripped names are garbage
-        end_of_name = header.find(b'\x0d\x0a', start_of_name)
-        start_of_inputslot = header.find(b'InputSlot',current_offset)+11 #Will change all input slots to 0 since we only have one vb0 at the end
+        #Will set element to the section in which we are working (POSITION, TEXCOORD, etc) by number as all ripped names are garbage
+        start_of_name = header.find(b'SemanticName',current_offset)+14
+        end_of_name = header.find(b'\x0d\x0a\x20\x20', start_of_name)
+        #Will change all input slots to 0 since we only have one vb0 at the end
+        start_of_inputslot = header.find(b'InputSlot',current_offset)+11
         end_of_inputslot = header.find(b'\x0d\x0a', start_of_inputslot)
-        start_of_alignedbyteoffset = header.find(b'AlignedByteOffset',current_offset)+19 #Will need to add the correct offset for each element
+        #Will need to add the correct offset for each element
+        start_of_alignedbyteoffset = header.find(b'AlignedByteOffset',current_offset)+19
         end_of_alignedbyteoffset = header.find(b'\x0d\x0a', start_of_alignedbyteoffset)
-        header = header[:start_of_name] + semantics[current_element] + header[end_of_name:start_of_inputslot] + b'0' + header[end_of_inputslot:start_of_alignedbyteoffset] + str(offsets[current_element]).encode() + header[end_of_alignedbyteoffset:]
+        header = header[:start_of_name] + semantics[current_element] + header[end_of_name:start_of_inputslot] + b'0' \
+        + header[end_of_inputslot:start_of_alignedbyteoffset] + str(offsets[current_element]).encode() + header[end_of_alignedbyteoffset:]
         current_offset = header.find(b'element[', current_offset + 1)
 
     #Grab vertex data, file by file, into two dimensional list
-    line_headers = [b']+000 POSITION: ', b']+012 NORMAL: ', b']+024 TANGENT: ', b']+036 TEXCOORD: ', b']+044 TEXCOORD1: ', b']+052 TEXCOORD2: ', b']+060 BLENDWEIGHTS: ', b']+076 BLENDINDICES: ']
+    line_headers = [b'POSITION', b'NORMAL', b'TANGENT', b'TEXCOORD', b'TEXCOORD1', b'TEXCOORD2', b'BLENDWEIGHTS', b'BLENDINDICES']
     vertex_data = []
     for i in range(len(vb_filenames)):
         vertex_file_data = []
@@ -75,7 +79,9 @@ def merge_vb_file_to_output(fileindex):
                 try:
                     current_offset = vb_data.find(b': ', vb_data.find(b'\x0d\x0a\x76\x62', current_offset + 1)) # Jump to next vertex
                     next_offset = vb_data.find(b'\x0d\x0a', current_offset + 1)
-                    vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + line_headers[i] + vb_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
+                    vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + b']+' \
+                    + str(offsets[i]).zfill(3).encode("utf8") + b' ' + line_headers[i] + b': ' \
+                    + vb_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
                     current_index = current_index + 1
                 except IndexError:
                     pass
