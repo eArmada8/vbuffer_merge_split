@@ -5,7 +5,7 @@
 # with 3dmigoto if one doesn't already exist.  Has only been tested with TOCS4.
 # GitHub eArmada8/vbuffer_merge_split
 
-import glob, os, re
+import glob, os, re, json
 
 def retrieve_meshes():
     # Make a list of all mesh groups in the current folder, both fmt and vb files are necessary for processing
@@ -32,13 +32,22 @@ def split_vb_file_and_make_ini_file(meshname):
                 offsets.append(int(line[21:-1]))
 
     #Determine the strides to be used in the individual buffers
-    strides = []
-    for i in range(len(offsets)):
-        if i == len(offsets) - 1:
-            strides.append(combined_stride - offsets[i])
-        else:
-            strides.append(offsets[i+1] - offsets[i])
-    
+    if os.path.exists(meshname + '.splitdata'):
+        #Use custom data if available
+        with open(meshname + '.splitdata', 'r') as f:
+            strides = json.loads(f.read())
+        combined_stride = sum(strides)
+        offsets = [0]
+        for i in range(1,len(strides)):
+            offsets.append(offsets[i-1] + strides[i-1])
+    else:
+        strides = []
+        for i in range(len(offsets)):
+            if i == len(offsets) - 1:
+                strides.append(combined_stride - offsets[i])
+            else:
+                strides.append(offsets[i+1] - offsets[i])
+   
     #Read in the entire combined buffer
     with open(meshname + '.vb', 'rb') as f:
         vb_read_buffer = f.read()
