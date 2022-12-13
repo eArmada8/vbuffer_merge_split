@@ -1,9 +1,9 @@
-# Vertex buffer merge script - for use with 3dmigoto frame dumps from games that use separate buffers
-# for each vertex element.  Execute from the directory of the indexed frame dump (not de-duped) and it will
-# output any buffers it finds into the ./output directory.  Has only been tested with TOCS4.
+# Vertex buffer merge script - for use with 3dmigoto frame dumps from games that use more than one vertex
+# buffer input slot.  Execute from the directory of the indexed frame dump (not de-duped) and it will
+# output any buffers it finds into the ./output directory.  It will discard values that overread a buffer.
 # GitHub eArmada8/vbuffer_merge_split
 
-import glob, os, re
+import glob, os, re, copy, json
 
 def retrieve_indices():
     # Make a list of all vertex buffer indices in the current folder
@@ -20,72 +20,122 @@ def copy_ib_file_to_output(fileindex):
             f.write(ib_file_data)
         del ib_file_data
     return
-    
+
+def stride_from_format(dxgi_format):
+    return(int(sum([int(x) for x in re.findall("[0-9]+",dxgi_format)])/8))
+
+def read_fmt(header):
+    fmt_struct = {}
+    headerlines = header.decode('utf-8').strip().replace('\r','').split('\n')
+    elements = []
+    element_num = -1
+    for line in range(len(headerlines)):
+        if headerlines[line][0:7] == 'element': # Moving on to the next element
+            if element_num > -1: # If this not the first element, append the previous element
+                elements.append(element)
+            element = {}
+            element_num = int(headerlines[line].split('[')[-1][:-2])
+        else:
+            linekey, lineval = headerlines[line].strip().split(': ')[0:2]
+            if lineval.isnumeric():
+                lineval = int(lineval)
+            if element_num == -1:
+                fmt_struct[linekey] = lineval
+            else:
+                element[linekey] = lineval
+    elements.append(element)
+    fmt_struct['elements'] = elements
+    return(fmt_struct)
+
+def make_header(fmt_struct):
+    header = ''
+    for key in fmt_struct:
+        if not key == 'elements':
+            header += key + ': ' + str(fmt_struct[key]) + '\n'
+        else:
+            pass
+    for i in range(len(fmt_struct['elements'])):
+        header += 'element[' + str(i) + ']:\n'
+        for key in fmt_struct['elements'][i]:
+            header += '  ' + key + ': ' + str(fmt_struct['elements'][i][key]) + '\n'
+    header += '\nvertex-data:\n\n'
+    return(header)
+
 def merge_vb_file_to_output(fileindex):
     # Take all the vertex buffer files for one index buffer and merge them into a single vertex buffer file
     #First, get a list of all the VB files
     vb_filenames = sorted(glob.glob(fileindex + '-vb*txt'))
 
-    #Get the strides for each buffer
-    strides = []
+    #Get Header
+    with open(vb_filenames[0], 'rb') as f:
+        filedata = f.read()
+        fmt = read_fmt(filedata[:filedata.find(b'vertex-data')])
+        del(filedata)
+
+    valid_elements = [] # These will be inserted (and thus ordered) by file then by offset
+    vertex_data = []
+    last_vertex = 0
+    original_strides = []
     for i in range(len(vb_filenames)):
+        #Determine valid offsets (sometimes 3DMigoto re-reads the same values if the game does not give good offsets
+        elements = [element for element in fmt['elements'] if element['InputSlot'] == i]
+        offsets = [element['AlignedByteOffset'] for element in elements]
+        used_offsets = []
+        for j in range(len(elements)):
+            if not elements[j]['AlignedByteOffset'] in used_offsets:
+                valid_elements.append(elements[j])
+                used_offsets.append(elements[j]['AlignedByteOffset'])
+        vertices = {}
+        for j in range(len(used_offsets)):
+            vertices[used_offsets[j]] = {}
+        #Grab vertex data
+        current_vertex = -1
+        v_semantics = []
         with open(vb_filenames[i], 'r') as f:
             for line in f:
-                if line[0:6] == 'stride':
-                    strides.append(int(line[8:-1]))
+                if line[0:6] == 'stride': #First line, replace with the merged stride
+                    original_strides.append(int(line.strip().split(': ')[1]))
+                if line[0:2] == 'vb':
+                    vertex_num, vertex_offset = [int(x) for x in line[4:].split(' ')[0].split(']+')]
+                    if vertex_num != current_vertex:
+                        #Reset invalid offset detector
+                        used_offset_counter = []
+                        current_vertex = vertex_num
+                    if not vertex_offset in used_offset_counter:
+                        vertices[vertex_offset][vertex_num] = line.split(': ')[1].strip()
+                        used_offset_counter.append(vertex_offset)
+                        #Add semantic to list if first vertex
+                        if vertex_num == 0:
+                            v_semantics.append(line.split(': ')[0].split(' ')[1])
+        for j in range(len(used_offsets)):
+            last_vertex = max(last_vertex, max(vertices[used_offsets[j]].keys()))
+            vertex_data.append({'Semantic': v_semantics[j], 'InputSlot': i,\
+                'OriginalOffset': used_offsets[j], 'Vertices': vertices[used_offsets[j]]})
+
+    #Generate new element list
+    new_elements = []
+    for i in range(len(valid_elements)):
+        new_element = copy.deepcopy(valid_elements[i]) # Make a copy so we still have the original
+        new_element['AlignedByteOffset'] += sum(original_strides[0:new_element['InputSlot']])
+        new_element['InputSlot'] = 0
+        new_elements.append(new_element)
+    new_fmt = copy.deepcopy(fmt)
+    new_fmt['stride'] = sum(original_strides)
+    new_fmt['elements'] = new_elements
     
-    #Calculate aligned byte offsets
-    offsets = []
-    for i in range(len(strides)):
-        if i == 0:
-            offsets.append(0)
-        else:
-            offsets.append(sum(strides[0:i]))
-    
-    #Create Header
-    output = []
-    with open(vb_filenames[0], 'r') as f:
-        element = 0
-        for line in f: #Evaluate each line, for modification as needed
-            if line[0:6] == 'stride': #First line, replace with the merged stride
-                output.append('stride: ' + str(sum(strides)) + '\n')
-            elif line[0:8] == 'element[': #Set element to the section in which we are working (POSITION, TEXCOORD, etc) by number
-                element = int(line[8:-3])
-                output.append(str(line))
-            elif line[2:12] == 'InputSlot:':
-                output.append('  InputSlot: 0\n') #All input slots are changed to 0 since we only have one vb0 at the end
-            elif line[2:19] == 'AlignedByteOffset':
-                output.append('  AlignedByteOffset: ' + str(offsets[element]) + '\n') #Add the correct offset for each element
-            else:
-                output.append(str(line)) #all other lines are unchanged
-            if line[0:11] == 'vertex-data':
-                break
-    output.append('\n')
-    
-    #Grab vertex data, file by file, into two dimensional list
-    vertex_data = []
-    for i in range(len(vb_filenames)):
-        vertex_file_data = []
-        with open(vb_filenames[i], 'r') as f:
-            for line in f: 
-                if line[0:3] == 'vb' + str(i):
-                    raw_line = str(line)
-                    vertex_file_data.append(raw_line.replace('vb' + str(i), 'vb0').replace(']+000', ']+' + str(offsets[i]).zfill(3)))
-            vertex_data.append(vertex_file_data)
-    
-    #Build vertex list in format expected by Blender plugin
-    for i in range(len(vertex_data[0])):
-        for j in range(len(vertex_data)):
-            try:
-                output.append(vertex_data[j][i])
-            except IndexError:
-                pass
-            continue
-        #Blender plugin expects a blank line after every vertex group
-        output.append('\n')
-    
+    #Create combined VB
     with open('output/' + vb_filenames[0], 'w') as f:
-        f.write("".join(output))
+        f.write(make_header(new_fmt))
+        for j in range(last_vertex+1):
+            for i in range(len(valid_elements)):
+                if j in vertex_data[i]['Vertices'].keys():
+                    f.write('vb0[' + str(j) + ']+' + str(new_fmt['elements'][i]['AlignedByteOffset']).zfill(3)\
+                        + ' ' + vertex_data[i]['Semantic'] + ': ' + vertex_data[i]['Vertices'][j] + '\n')
+            #Blender plugin expects a blank line after every vertex group
+            f.write('\n')
+
+    with open('output/{0}.splitdata'.format(fileindex), 'w') as f:
+        f.write(json.dumps(original_strides))
     return
 
 # End of functions, begin main script
