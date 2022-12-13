@@ -3,7 +3,7 @@
 # output any buffers it finds into the ./output directory.  It will discard values that overread a buffer.
 # GitHub eArmada8/vbuffer_merge_split
 
-import glob, os, re, copy
+import glob, os, re, copy, json
 
 def retrieve_indices():
     # Make a list of all vertex buffer indices in the current folder
@@ -75,10 +75,9 @@ def merge_vb_file_to_output(fileindex):
     valid_elements = [] # These will be inserted (and thus ordered) by file then by offset
     vertex_data = []
     last_vertex = 0
+    original_strides = []
     for i in range(len(vb_filenames)):
-        with open(vb_filenames[i], 'r') as f:
-            lines = [line for line in f]
-        #Obtain valid offsets (sometimes 3DMigoto re-reads the same values if the game does not give good offsets
+        #Determine valid offsets (sometimes 3DMigoto re-reads the same values if the game does not give good offsets
         elements = [element for element in fmt['elements'] if element['InputSlot'] == i]
         offsets = [element['AlignedByteOffset'] for element in elements]
         used_offsets = []
@@ -86,47 +85,57 @@ def merge_vb_file_to_output(fileindex):
             if not elements[j]['AlignedByteOffset'] in used_offsets:
                 valid_elements.append(elements[j])
                 used_offsets.append(elements[j]['AlignedByteOffset'])
-        #Grab vertex data
+        vertices = {}
         for j in range(len(used_offsets)):
-            bufferlines = [line for line in lines if '+'+str(used_offsets[j]).zfill(3) in line]
-            vertices = {}
-            used_vertices = [] # Similar strategy to solving the re-used offset problem, only allow one vertex per vertex number
-            for k in range(len(bufferlines)):
-                vertex_num = int(bufferlines[k].split('[')[1].split(']')[0])
-                if not vertex_num in used_vertices:
-                    vertices[vertex_num] = bufferlines[k].split(': ')[1].strip()
-                    used_vertices.append(vertex_num)
-            last_vertex = max(last_vertex, max(vertices.keys()))
-            vertex_data.append({'Semantic': bufferlines[0].split(': ')[0].split(' ')[1], 'InputSlot': i,\
-                'OriginalOffset': j, 'Vertices': vertices})
+            vertices[used_offsets[j]] = {}
+        #Grab vertex data
+        current_vertex = -1
+        v_semantics = []
+        with open(vb_filenames[i], 'r') as f:
+            for line in f:
+                if line[0:6] == 'stride': #First line, replace with the merged stride
+                    original_strides.append(int(line.strip().split(': ')[1]))
+                if line[0:2] == 'vb':
+                    vertex_num, vertex_offset = [int(x) for x in line[4:].split(' ')[0].split(']+')]
+                    if vertex_num != current_vertex:
+                        #Reset invalid offset detector
+                        used_offset_counter = []
+                        current_vertex = vertex_num
+                    if not vertex_offset in used_offset_counter:
+                        vertices[vertex_offset][vertex_num] = line.split(': ')[1].strip()
+                        used_offset_counter.append(vertex_offset)
+                        #Add semantic to list if first vertex
+                        if vertex_num == 0:
+                            v_semantics.append(line.split(': ')[0].split(' ')[1])
+        for j in range(len(used_offsets)):
+            last_vertex = max(last_vertex, max(vertices[used_offsets[j]].keys()))
+            vertex_data.append({'Semantic': v_semantics[j], 'InputSlot': i,\
+                'OriginalOffset': used_offsets[j], 'Vertices': vertices[used_offsets[j]]})
 
     #Generate new element list
-    current_offset = 0
     new_elements = []
     for i in range(len(valid_elements)):
         new_element = copy.deepcopy(valid_elements[i]) # Make a copy so we still have the original
+        new_element['AlignedByteOffset'] += sum(original_strides[0:new_element['InputSlot']])
         new_element['InputSlot'] = 0
-        new_element['AlignedByteOffset'] = current_offset
-        current_offset += stride_from_format(new_element['Format'])
         new_elements.append(new_element)
     new_fmt = copy.deepcopy(fmt)
-    new_fmt['stride'] = current_offset
+    new_fmt['stride'] = sum(original_strides)
     new_fmt['elements'] = new_elements
     
     #Create combined VB
-    output = make_header(new_fmt)
-    for j in range(last_vertex+1):
-        for i in range(len(valid_elements)):
-            if j in vertex_data[i]['Vertices'].keys():
-                output += 'vb0[' + str(j) + ']+' + str(new_fmt['elements'][i]['AlignedByteOffset']).zfill(3)\
-                    + ' ' + vertex_data[i]['Semantic'] + ': ' + vertex_data[i]['Vertices'][j] + '\n'
-        #Blender plugin expects a blank line after every vertex group
-        output += '\n'
-    
     with open('output/' + vb_filenames[0], 'w') as f:
-        f.write(output)
-    with open('output/{0}.orig_fmt'.format(fileindex), 'w') as f:
-        f.write(make_header(fmt)[:-15])
+        f.write(make_header(new_fmt))
+        for j in range(last_vertex+1):
+            for i in range(len(valid_elements)):
+                if j in vertex_data[i]['Vertices'].keys():
+                    f.write('vb0[' + str(j) + ']+' + str(new_fmt['elements'][i]['AlignedByteOffset']).zfill(3)\
+                        + ' ' + vertex_data[i]['Semantic'] + ': ' + vertex_data[i]['Vertices'][j] + '\n')
+            #Blender plugin expects a blank line after every vertex group
+            f.write('\n')
+
+    with open('output/{0}.splitdata'.format(fileindex), 'w') as f:
+        f.write(json.dumps(original_strides))
     return
 
 # End of functions, begin main script
