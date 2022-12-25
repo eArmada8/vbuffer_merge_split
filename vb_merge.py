@@ -77,6 +77,7 @@ def merge_vb_file_to_output(fileindex):
     last_vertex = 0
     original_strides = []
     for i in range(len(vb_filenames)):
+        valid_input_slot = True
         #Determine valid offsets (sometimes 3DMigoto re-reads the same values if the game does not give good offsets
         elements = [element for element in fmt['elements'] if element['InputSlot'] == i]
         offsets = [element['AlignedByteOffset'] for element in elements]
@@ -95,6 +96,9 @@ def merge_vb_file_to_output(fileindex):
             for line in f:
                 if line[0:6] == 'stride': #First line, replace with the merged stride
                     original_strides.append(int(line.strip().split(': ')[1]))
+                    if original_strides[-1] == 0:
+                        valid_input_slot = False
+                        break #If the entire buffer is empty, skip this file
                 if line[0:2] == 'vb':
                     vertex_num, vertex_offset = [int(x) for x in line[4:].split(' ')[0].split(']+')]
                     if vertex_num != current_vertex:
@@ -107,10 +111,13 @@ def merge_vb_file_to_output(fileindex):
                         #Add semantic to list if first vertex
                         if vertex_num == 0:
                             v_semantics.append(line.split(': ')[0].split(' ')[1])
-        for j in range(len(used_offsets)):
-            last_vertex = max(last_vertex, max(vertices[used_offsets[j]].keys()))
-            vertex_data.append({'Semantic': v_semantics[j], 'InputSlot': i,\
-                'OriginalOffset': used_offsets[j], 'Vertices': vertices[used_offsets[j]]})
+        if valid_input_slot == True: # If the entire buffer is empty, skip all semantics
+            for j in range(len(used_offsets)):
+                last_vertex = max(last_vertex, max(vertices[used_offsets[j]].keys()))
+                vertex_data.append({'Semantic': v_semantics[j], 'InputSlot': i,\
+                    'OriginalOffset': used_offsets[j], 'Vertices': vertices[used_offsets[j]]})
+
+
 
     #Generate new element list
     new_elements = []
@@ -127,7 +134,7 @@ def merge_vb_file_to_output(fileindex):
     with open('output/' + vb_filenames[0], 'w') as f:
         f.write(make_header(new_fmt))
         for j in range(last_vertex+1):
-            for i in range(len(valid_elements)):
+            for i in range(len(vertex_data)):
                 if j in vertex_data[i]['Vertices'].keys():
                     f.write('vb0[' + str(j) + ']+' + str(new_fmt['elements'][i]['AlignedByteOffset']).zfill(3)\
                         + ' ' + vertex_data[i]['Semantic'] + ': ' + vertex_data[i]['Vertices'][j] + '\n')
