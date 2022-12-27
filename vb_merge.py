@@ -36,7 +36,10 @@ def read_fmt(header):
             element = {}
             element_num = int(headerlines[line].split('[')[-1][:-2])
         else:
-            linekey, lineval = headerlines[line].strip().split(': ')[0:2]
+            try:
+                linekey, lineval = headerlines[line].strip().split(': ')[0:2]
+            except ValueError:
+                linekey, lineval = headerlines[line].strip().split(':')[0], ''
             if lineval.isnumeric():
                 lineval = int(lineval)
             if element_num == -1:
