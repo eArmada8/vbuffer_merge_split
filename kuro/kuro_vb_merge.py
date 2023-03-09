@@ -9,9 +9,7 @@ import glob, os, re, shutil
 def retrieve_indices():
     # Make a list of all vertex buffer indices in the current folder (only include 8-part vertex buffers)
     # NOTE: Will *not* include index buffers without vertex data! (i.e. ib files without corresponding vb files)
-    list = sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb7*txt')])
-    list_to_exclude = [re.findall('^\d+', x)[0] for x in glob.glob('*-vb8*txt')]
-    return [x for x in list if x not in list_to_exclude]
+    return(sorted([re.findall('^\d+', x)[0] for x in glob.glob('*-vb2*txt')]))
 
 def copy_ib_file_to_output(fileindex):
     # Copy the index buffer file to the output directory unmodified, if it exists
@@ -19,55 +17,106 @@ def copy_ib_file_to_output(fileindex):
     if os.path.exists(ib_filename):
         shutil.copy2(ib_filename, 'output/' + ib_filename)
     return
-    
+
+def stride_from_format(dxgi_format):
+    return(int(sum([int(x) for x in re.findall("[0-9]+",dxgi_format)])/8))
+
+def remove_semantic_names (header):
+    new_header = b''
+    current_offset = 0
+    next_sem = 1
+    while next_sem > 0:
+        next_sem = header.find(b'SemanticName', current_offset)
+        if next_sem > 0:
+            new_header += header[current_offset:next_sem] + b'SemanticName: UNKNOWN'
+            current_offset = header.find(b'SemanticIndex', next_sem) - 4
+        else:
+            new_header += header[current_offset:len(header)]
+    return(new_header)
+
+def guess_semantic_names (fmt_struct):
+    for i in range(len(fmt_struct['elements'])):
+        if fmt_struct['elements'][i]['Format'] == 'R32G32B32_FLOAT':
+            if fmt_struct['elements'][i]['InputSlot'] == 0:
+                fmt_struct['elements'][i]['SemanticName'] = 'POSITION'
+            elif fmt_struct['elements'][i]['InputSlot'] == 1:
+                fmt_struct['elements'][i]['SemanticName'] = 'NORMAL'
+            elif fmt_struct['elements'][i]['InputSlot'] == 2:
+                fmt_struct['elements'][i]['SemanticName'] = 'TANGENT'
+        elif fmt_struct['elements'][i]['Format'] == 'R32G32_FLOAT':
+            fmt_struct['elements'][i]['SemanticName'] = 'TEXCOORD'
+        elif fmt_struct['elements'][i]['Format'] == 'R32G32B32A32_FLOAT':
+            if i == len(fmt_struct['elements']) - 2:
+                fmt_struct['elements'][i]['SemanticName'] = 'BLENDWEIGHTS'
+            else:
+                fmt_struct['elements'][i]['SemanticName'] = 'COLOR'
+        elif fmt_struct['elements'][i]['Format'] == 'R32G32B32A32_UINT':
+            fmt_struct['elements'][i]['SemanticName'] = 'BLENDINDICES'
+        elif fmt_struct['elements'][i]['Format'] == 'B8G8R8A8_UNORM':
+            fmt_struct['elements'][i]['SemanticName'] = 'COLOR'
+    return(fmt_struct)
+
+def fix_strides (fmt_struct):
+    stride = 0
+    for i in range(len(fmt_struct['elements'])):
+        fmt_struct['elements'][i]['AlignedByteOffset'] = stride
+        fmt_struct['elements'][i]['InputSlot'] = 0
+        stride += stride_from_format(fmt_struct['elements'][i]['Format'])
+    fmt_struct['stride'] = stride
+    return(fmt_struct)
+
+def read_fmt (header):
+    fmt_struct = {}
+    headerlines = remove_semantic_names(header).decode('utf-8').strip().replace('\r','').split('\n')
+    elements = []
+    element_num = -1
+    for line in range(len(headerlines)):
+        if headerlines[line][0:7] == 'element': # Moving on to the next element
+            if element_num > -1: # If this not the first element, append the previous element
+                elements.append(element)
+            element = {}
+            element_num = int(headerlines[line].split('[')[-1][:-2])
+        else:
+            linekey, lineval = headerlines[line].strip().split(': ')[0:2]
+            if lineval.isnumeric():
+                lineval = int(lineval)
+            if element_num == -1:
+                fmt_struct[linekey] = lineval
+            else:
+                element[linekey] = lineval
+    elements.append(element)
+    fmt_struct['elements'] = elements
+    fmt_struct = guess_semantic_names(fmt_struct)
+    fmt_struct = fix_strides(fmt_struct)
+    return(fmt_struct)
+
+def make_header(fmt_struct):
+    header = ''
+    for key in fmt_struct:
+        if not key == 'elements':
+            header += key + ': ' + str(fmt_struct[key]) + '\n'
+        else:
+            pass
+    for i in range(len(fmt_struct['elements'])):
+        header += 'element[' + str(i) + ']:\n'
+        for key in fmt_struct['elements'][i]:
+            header += '  ' + key + ': ' + str(fmt_struct['elements'][i][key]) + '\n'
+    header += '\nvertex-data:\n\n'
+    return(header)
+
 def merge_vb_file_to_output(fileindex):
     # Take all the vertex buffer files for one index buffer and merge them into a single vertex buffer file
     # First, get a list of all the VB files
     vb_filenames = sorted(glob.glob(fileindex + '-vb*txt'))
 
-    #Get the strides for each buffer
-    strides = []
-    for i in range(len(vb_filenames)):
-        with open(vb_filenames[i], 'rb') as f:
-            vb_data = f.read()
-        strides.append(int(vb_data[vb_data.find(b'stride:')+8:vb_data.find(b'\x0d\x0a')]))
-
-    #Calculate aligned byte offsets
-    offsets = []
-    for i in range(len(strides)):
-        if i == 0:
-            offsets.append(0)
-        else:
-            offsets.append(sum(strides[0:i]))
-
-    #Create Header
-    semantics = [b'POSITION', b'NORMAL', b'TANGENT', b'TEXCOORD', b'TEXCOORD', b'TEXCOORD', b'BLENDWEIGHTS', b'BLENDINDICES']
-    output = []
+    #Get Header
     with open(vb_filenames[0], 'rb') as f:
-        vb_data = f.read()
-        end_of_header = vb_data.find(b'\x0d\x0avb', 0)+2
-        header = bytearray(vb_data[0:end_of_header])
-        header[header.find(b'stride:')+8:header.find(b'\x0d\x0a')] = str(sum(strides)).encode() #First line, replace with the merged stride
-
-    #Replace Semantic name, input slot and aligned byte offset for each element
-    current_offset = header.find(b'element[')
-    while current_offset > 0:
-        current_element = int(header[current_offset+8:current_offset+9])
-        #Will set element to the section in which we are working (POSITION, TEXCOORD, etc) by number as all ripped names are garbage
-        start_of_name = header.find(b'SemanticName',current_offset)+14
-        end_of_name = header.find(b'\x0d\x0a\x20\x20', start_of_name)
-        #Will change all input slots to 0 since we only have one vb0 at the end
-        start_of_inputslot = header.find(b'InputSlot',current_offset)+11
-        end_of_inputslot = header.find(b'\x0d\x0a', start_of_inputslot)
-        #Will need to add the correct offset for each element
-        start_of_alignedbyteoffset = header.find(b'AlignedByteOffset',current_offset)+19
-        end_of_alignedbyteoffset = header.find(b'\x0d\x0a', start_of_alignedbyteoffset)
-        header = header[:start_of_name] + semantics[current_element] + header[end_of_name:start_of_inputslot] + b'0' \
-        + header[end_of_inputslot:start_of_alignedbyteoffset] + str(offsets[current_element]).encode() + header[end_of_alignedbyteoffset:]
-        current_offset = header.find(b'element[', current_offset + 1)
+        filedata = f.read()
+        fmt = read_fmt(filedata[:filedata.find(b'vertex-data')])
+        del(filedata)
 
     #Grab vertex data, file by file, into two dimensional list
-    line_headers = [b'POSITION', b'NORMAL', b'TANGENT', b'TEXCOORD', b'TEXCOORD1', b'TEXCOORD2', b'BLENDWEIGHTS', b'BLENDINDICES']
+    line_headers = [(x['SemanticName']+str(x['SemanticIndex'])).encode() if x['SemanticIndex'] > 0 else x['SemanticName'].encode() for x in fmt['elements']]
     vertex_data = []
     for i in range(len(vb_filenames)):
         vertex_file_data = []
@@ -80,7 +129,7 @@ def merge_vb_file_to_output(fileindex):
                     current_offset = vb_data.find(b': ', vb_data.find(b'\x0d\x0a\x76\x62', current_offset + 1)) # Jump to next vertex
                     next_offset = vb_data.find(b'\x0d\x0a', current_offset + 1)
                     vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + b']+' \
-                    + str(offsets[i]).zfill(3).encode("utf8") + b' ' + line_headers[i] + b': ' \
+                    + str(fmt['elements'][i]['AlignedByteOffset']).zfill(3).encode("utf8") + b' ' + line_headers[i] + b': ' \
                     + vb_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
                     current_index = current_index + 1
                 except IndexError:
@@ -101,7 +150,7 @@ def merge_vb_file_to_output(fileindex):
         vertex_output.extend(b'\x0d\x0a')
 
     with open('output/' + vb_filenames[0], 'wb') as f:
-        f.write(header+vertex_output)
+        f.write(make_header(fmt).encode()+vertex_output)
     return
 
 # End of functions, begin main script
