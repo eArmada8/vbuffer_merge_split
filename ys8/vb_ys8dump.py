@@ -30,33 +30,34 @@ def make_fmt():
         'SemanticName': 'COLOR', 'SemanticIndex': '1', 'Format': 'R8G8B8A8_UNORM',\
         'InputSlot': '0', 'AlignedByteOffset': '44', 'InputSlotClass': 'per-vertex',\
         'InstanceDataStepRate': '0'}, {'id': '6', 'SemanticName': 'TEXCOORD',\
-        'SemanticIndex': '0', 'Format': 'R32G32_FLOAT', 'InputSlot': '0',\
+        'SemanticIndex': '0', 'Format': 'R32G32B32A32_FLOAT', 'InputSlot': '0',\
         'AlignedByteOffset': '48', 'InputSlotClass': 'per-vertex',\
-        'InstanceDataStepRate': '0'}, {'id': '7', 'SemanticName': 'UNKNOWN',\
-        'SemanticIndex': '2', 'Format': 'R32G32_FLOAT', 'InputSlot': '0',\
-        'AlignedByteOffset': '56', 'InputSlotClass': 'per-vertex', 'InstanceDataStepRate': '0'},\
-        {'id': '8', 'SemanticName': 'TEXCOORD', 'SemanticIndex': '1', 'Format': 'R32G32_FLOAT',\
-        'InputSlot': '0', 'AlignedByteOffset': '64', 'InputSlotClass': 'per-vertex',\
-        'InstanceDataStepRate': '0'}, {'id': '9', 'SemanticName': 'UNKNOWN', 'SemanticIndex': '3',\
-        'Format': 'R32G32_FLOAT', 'InputSlot': '0', 'AlignedByteOffset': '72',\
-        'InputSlotClass': 'per-vertex', 'InstanceDataStepRate': '0'}, {'id': '10',\
-        'SemanticName': 'BLENDWEIGHTS', 'SemanticIndex': '0', 'Format': 'R8G8B8A8_UNORM',\
-        'InputSlot': '0', 'AlignedByteOffset': '80', 'InputSlotClass': 'per-vertex',\
-        'InstanceDataStepRate': '0'}, {'id': '11', 'SemanticName': 'BLENDINDICES',\
+        'InstanceDataStepRate': '0'}, {'id': '7', 'SemanticName': 'TEXCOORD',\
+        'SemanticIndex': '1', 'Format': 'R32G32B32A32_FLOAT', 'InputSlot': '0',\
+        'AlignedByteOffset': '64', 'InputSlotClass': 'per-vertex',\
+        'InstanceDataStepRate': '0'}, {'id': '8', 'SemanticName': 'BLENDWEIGHTS',\
+        'SemanticIndex': '0', 'Format': 'R8G8B8A8_UNORM', 'InputSlot': '0',\
+        'AlignedByteOffset': '80', 'InputSlotClass': 'per-vertex',\
+        'InstanceDataStepRate': '0'}, {'id': '9', 'SemanticName': 'BLENDINDICES',\
         'SemanticIndex': '0', 'Format': 'R8G8B8A8_UINT', 'InputSlot': '0',\
         'AlignedByteOffset': '84', 'InputSlotClass': 'per-vertex', 'InstanceDataStepRate': '0'}]})
 
-def read_vb(filename):
-    orig_offset = ['+000', '+016', '+032', '+036', '+040', '+044', '+048', '+56', '+064', '+072', '+080', '+084']
-    SemanticName = ['POSITION', 'UNKNOWN', 'NORMAL', 'UNKNOWN', 'COLOR', 'COLOR',\
-        'TEXCOORD', 'UNKNOWN', 'TEXCOORD', 'UNKNOWN', 'BLENDWEIGHTS', 'BLENDINDICES']
-    SemanticIndex = ['0', '0,', '0', '1', '0', '1', '0', '2', '1', '3', '0', '0']
-    ExpectedElementLength = [4,4,4,4,4,4,2,2,2,2,4,4] # 1 = Scalar, 2 = Vec2, 3 = Vec3, 4 = Vec4
-    Format = [0,0,0,0,0,0,0,1,0,1,0,1] #0 = float, 1 = int
+def strip_non_ascii(f, replace_with = 'x'):
+    new_char = ord(replace_with)
+    f.seek(0)
+    return(bytes([x if x < 128 else new_char for x in f.read()]))
+
+def read_ys8_vb(filename):
+    orig_offset = ['+000', '+016', '+032', '+036', '+040', '+044', '+048', '+064', '+080', '+084']
+    SemanticName = ['POSITION', 'UNKNOWN', 'NORMAL', 'UNKNOWN', 'COLOR',\
+        'COLOR', 'TEXCOORD', 'TEXCOORD', 'BLENDWEIGHTS', 'BLENDINDICES']
+    SemanticIndex = ['0', '0', '0', '1', '0', '1', '0', '1', '0', '0']
+    Format = [0,0,0,0,0,0,0,0,0,1] #0 = float, 1 = int
     Blanks = [[0,0,0,1], [0,0,0,0], [0,0,0,1], [0,0,0,0], [1,1,1,1], [0,0,0,1],\
-        [0,0], [0,0], [0,0], [0,0], [0,0,0,0], [0,0,0,0]]
-    with open(filename,'r') as f:
-        lines = f.read().split('\n')
+        [0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]]
+    with open(filename,'rb') as f:
+        output = strip_non_ascii(f)
+        lines = output.decode().replace('\r\n','\n').split('\n')
     vertex_count = [int(x.split(': ')[1]) for x in lines if 'vertex count' in x][0]
     if lines[0] == 'stride: 88':
         vb = []
@@ -69,8 +70,8 @@ def read_vb(filename):
                     raw_values[j] = [float(x) for x in raw_values[j]]
                 elif Format[i] == 1:
                     raw_values[j] = [int(x) for x in raw_values[j]]
-            if len(raw_values[0]) < ExpectedElementLength[i]: # Add values if too short (e.g. Vec3 to Vec4)
-                missing_length = ExpectedElementLength[i] - len(raw_values[0])
+            if len(raw_values[0]) < 4: # Add values if too short (e.g. Vec3 to Vec4)
+                missing_length = 4 - len(raw_values[0])
                 raw_values = [x+Blanks[i][-missing_length:] for x in raw_values]
             vb.append({'SemanticName': SemanticName[i], 'SemanticIndex': SemanticIndex[i],\
                 'Buffer': raw_values})
@@ -78,7 +79,7 @@ def read_vb(filename):
     else:
         return(False)
 
-def read_ib(filename):
+def read_ys8_ib(filename):
     with open(filename,'r') as f:
         lines = f.read().split('\n\n')[1].split('\n')
     if lines[-1] == '':
@@ -99,10 +100,10 @@ if __name__ == "__main__":
     fmt = make_fmt()
     indices = retrieve_indices()
     for i in range(len(indices)):
-        vb = read_vb(glob.glob(indices[i] + '-vb*txt')[0])
+        vb = read_ys8_vb(glob.glob(indices[i] + '-vb*txt')[0])
         if vb != False:
             #print("Processing {0}...".format(indices[i]))
-            ib = read_ib(glob.glob(indices[i] + '-ib*txt')[0])
+            ib = read_ys8_ib(glob.glob(indices[i] + '-ib*txt')[0])
             write_fmt(fmt, 'output/{0}.fmt'.format(indices[i]))
             write_ib(ib, 'output/{0}.ib'.format(indices[i]), fmt)
             write_vb(vb, 'output/{0}.vb'.format(indices[i]), fmt)
