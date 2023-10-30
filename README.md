@@ -5,7 +5,7 @@ README (vbuffer_merge_split) - GitHub eArmada8/vbuffer_merge_split
 
 A small pair of python scripts to accompany DarkStarSword's 3dmigoto plugin for Blender.  With games that use individual vertex buffers for every element rather than a combined layout, the plugin gives the fatal error "Only draw calls using a single vertex buffer and a single index buffer are supported for now."  These scripts get around this restriction.
 
-DarkStarSword's plugin for Blender: https://github.com/DarkStarSword/3d-fixes/blob/master/blender_3dmigoto.py (tested on commit c6daca9)
+DarkStarSword's plugin for Blender: https://github.com/DarkStarSword/3d-fixes/blob/master/blender_3dmigoto.py (tested on commit [c6daca9](https://raw.githubusercontent.com/DarkStarSword/3d-fixes/c6daca90d64b0fb53f2ebf70806e539b8007d328/blender_3dmigoto.py))
 
 Disclaimer: I have only used this script on Trails of Cold Steel IV.  I do not know if it will work for any other game.  Please modify as you see fit.
 
