@@ -1,7 +1,6 @@
 # vbuffer_merge_split
-Small python scripts to merge and split raw vertex buffers used by DarkStarSword's 3dmigoto plugin for Blender
 
-README (vbuffer_merge_split) - GitHub eArmada8/vbuffer_merge_split
+*NOTE - This project has been archived, as it is now obsolete.*  DarkStarSword's 3dmigoto plugin now natively supports vertex buffers with multiple input slots, so further development on this tool has been halted as there is no further use for this tool.
 
 A small pair of python scripts to accompany DarkStarSword's 3dmigoto plugin for Blender.  With games that use individual vertex buffers for every element rather than a combined layout, the plugin gives the fatal error "Only draw calls using a single vertex buffer and a single index buffer are supported for now."  These scripts get around this restriction.
 
