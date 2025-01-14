@@ -65,7 +65,7 @@ def fix_strides (fmt_struct):
     fmt_struct['stride'] = stride
     return(fmt_struct)
 
-def read_fmt (header):
+def read_fmt (header, combined_stride = True):
     fmt_struct = {}
     headerlines = remove_semantic_names(header).decode('utf-8').strip().replace('\r','').split('\n')
     elements = []
@@ -87,7 +87,8 @@ def read_fmt (header):
     elements.append(element)
     fmt_struct['elements'] = elements
     fmt_struct = guess_semantic_names(fmt_struct)
-    fmt_struct = fix_strides(fmt_struct)
+    if combined_stride == True:
+        fmt_struct = fix_strides(fmt_struct)
     return(fmt_struct)
 
 def make_header(fmt_struct):
@@ -109,33 +110,42 @@ def merge_vb_file_to_output(fileindex):
     # First, get a list of all the VB files
     vb_filenames = sorted(glob.glob(fileindex + '-vb*txt'))
 
-    #Get Header
+    #Get header for merged buffer
     with open(vb_filenames[0], 'rb') as f:
         filedata = f.read()
-        fmt = read_fmt(filedata[:filedata.find(b'vertex-data')])
+        fmt = read_fmt(filedata[:filedata.find(b'vertex-data')], combined_stride = True)
         del(filedata)
 
     #Grab vertex data, file by file, into two dimensional list
     line_headers = [(x['SemanticName']+str(x['SemanticIndex'])).encode() if x['SemanticIndex'] > 0 else x['SemanticName'].encode() for x in fmt['elements']]
     vertex_data = []
     for i in range(len(vb_filenames)):
-        vertex_file_data = []
+        merged_vertex_file_data = []
+        split_vertex_file_data = []
         with open(vb_filenames[i], 'rb') as f:
             vb_data = f.read()
+            #Get header for split buffer
+            base_fmt = read_fmt(vb_data[:vb_data.find(b'vertex-data')], combined_stride = False)
             current_index = 0
             current_offset = vb_data.find(b'vertex-data', 0) # Jump to start of vertex data
             while current_offset > 0:
                 try:
                     current_offset = vb_data.find(b': ', vb_data.find(b'\x0d\x0a\x76\x62', current_offset + 1)) # Jump to next vertex
                     next_offset = vb_data.find(b'\x0d\x0a', current_offset + 1)
-                    vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + b']+' \
+                    merged_vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + b']+' \
                     + str(fmt['elements'][i]['AlignedByteOffset']).zfill(3).encode("utf8") + b' ' + line_headers[i] + b': ' \
+                    + vb_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
+                    split_vertex_file_data.append(b'vb0[' + str(current_index).encode("utf8") + b']+' \
+                    + str(base_fmt['elements'][i]['AlignedByteOffset']).zfill(3).encode("utf8") + b' ' + line_headers[i] + b': ' \
                     + vb_data[current_offset:next_offset].split(b': ')[1] + b'\x0d\x0a')
                     current_index = current_index + 1
                 except IndexError:
                     pass
                 continue
-            vertex_data.append(vertex_file_data)
+            vertex_data.append(merged_vertex_file_data)
+            fixed_buffer = b'\x0d\x0a'.join(split_vertex_file_data) + b'\x0d\x0a'
+            with open(vb_filenames[i], 'wb') as f:
+                f.write(make_header(base_fmt).encode()+fixed_buffer)
 
     #Build vertex list in format expected by Blender plugin
     vertex_output = bytearray()
